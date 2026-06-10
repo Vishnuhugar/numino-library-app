@@ -7,7 +7,7 @@ A full-stack library management application built with **Python (FastAPI)**, **P
 ## Architecture Overview
 
 ```
-library-app/
+numino-library-app/
 ├── backend/                  # Python FastAPI REST API
 │   ├── app/
 │   │   ├── api/routes/       # HTTP route handlers
@@ -142,7 +142,7 @@ A **partial unique index** prevents the same member borrowing the same book twic
 
 ```bash
 # 1. Clone / unzip the project
-cd library-app
+cd numino-library-app
 
 # 2. Copy environment config
 cp .env.example .env
