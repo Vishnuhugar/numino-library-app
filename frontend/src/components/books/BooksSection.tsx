@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Pencil, Trash2, BookOpen, X } from 'lucide-react';
 import { booksApi, type Book } from '@/lib/api';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Toast from '@/components/ui/Toast';
 
 export default function BooksSection({ onAction }: { onAction: () => void }) {
   const [books, setBooks]     = useState<Book[]>([]);
@@ -20,7 +22,7 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await booksApi.list({ page, size: SIZE, search: search || undefined, available_only: avail });
+      const r = await booksApi.list({ page, size: SIZE, search: search?.trim() || undefined, available_only: avail });
       setBooks(r.items); setTotal(r.total);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
@@ -31,10 +33,16 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
   const openCreate = () => { setSelected(null); setModal('create'); };
   const openEdit   = (b: Book) => { setSelected(b); setModal('edit'); };
 
-  const handleDelete = async (b: Book) => {
-    if (!confirm(`Delete "${b.title}"?`)) return;
+  const [confirmDelete, setConfirmDelete] = useState<Book | null>(null);
+  const [deletingIds, setDeletingIds] = useState<string[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const handleDelete = async (b: Book) => setConfirmDelete(b);
+  const doDelete = async (b: Book) => {
+    setDeletingIds(ids => [...ids, b.id]);
     try { await booksApi.delete(b.id); load(); onAction(); }
-    catch (e: any) { alert(e.message); }
+    catch (e: any) { setToast(e.message || 'Delete failed'); }
+    finally { setDeletingIds(ids => ids.filter(i => i !== b.id)); setConfirmDelete(null); }
   };
 
   const pages = Math.max(1, Math.ceil(total / SIZE));
@@ -43,10 +51,8 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.8rem' }}>Books Catalogue</h1>
-          <div style={{ color:'rgba(26,18,8,0.5)', fontFamily:"'Crimson Text',serif" }}>
-            {total} title{total !== 1 ? 's' : ''} in the collection
-          </div>
+          <h1 className="header-title">Books Catalogue</h1>
+          <div className="header-sub">{total} title{total !== 1 ? 's' : ''} in the collection</div>
         </div>
         <button className="btn btn-primary" onClick={openCreate}>
           <Plus size={16} /> Add Book
@@ -55,53 +61,52 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
 
       {/* Filters */}
       <div className="flex gap-3 mb-6">
-        <div style={{ position:'relative', flex:1, maxWidth:360 }}>
-          <Search size={15} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'rgba(26,18,8,0.4)' }} />
-          <input className="library-input" style={{ paddingLeft:32 }}
+        <div className="input-with-icon input-flex">
+          <Search size={15} className="icon-left" />
+          <input className="library-input with-pad input-small"
                  placeholder="Search title or author…"
                  value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
-        <label style={{ display:'flex', alignItems:'center', gap:6, fontFamily:"'Crimson Text',serif", cursor:'pointer' }}>
+        <label className="filters-label">
           <input type="checkbox" checked={avail} onChange={e => { setAvail(e.target.checked); setPage(1); }} />
           Available only
         </label>
       </div>
 
       {error && <div style={{ color:'#8b1a1a', marginBottom:12 }}>{error}</div>}
-
       {/* Table */}
-      <div style={{ background:'rgba(253,246,227,0.7)', border:'1px solid rgba(200,151,42,0.2)', borderRadius:2 }}>
+      <div className="table-wrap">
         {loading ? (
-          <div style={{ padding:40, textAlign:'center', color:'rgba(26,18,8,0.4)', fontFamily:"'Crimson Text',serif" }}>Loading…</div>
+          <div className="loading-empty">Loading…</div>
         ) : books.length === 0 ? (
-          <div style={{ padding:40, textAlign:'center', color:'rgba(26,18,8,0.4)', fontFamily:"'Crimson Text',serif" }}>No books found.</div>
+          <div className="loading-empty">No books found.</div>
         ) : (
           <table className="lib-table">
             <thead>
               <tr>
                 <th>Title</th><th>Author</th><th>Genre</th><th>ISBN</th>
-                <th style={{ textAlign:'center' }}>Copies</th><th style={{ textAlign:'center' }}>Available</th>
+                <th className="text-center">Copies</th><th className="text-center">Available</th>
                 <th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
               {books.map(b => (
                 <tr key={b.id}>
-                  <td style={{ fontWeight:600 }}>{b.title}</td>
-                  <td style={{ color:'rgba(26,18,8,0.7)' }}>{b.author}</td>
-                  <td style={{ color:'rgba(26,18,8,0.6)', fontSize:'0.88rem' }}>{b.genre || '—'}</td>
-                  <td style={{ fontFamily:"'Courier New',monospace", fontSize:'0.82rem', color:'rgba(26,18,8,0.5)' }}>{b.isbn || '—'}</td>
-                  <td style={{ textAlign:'center' }}>{b.total_copies}</td>
-                  <td style={{ textAlign:'center' }}>{b.available_copies}</td>
+                  <td className="cell-strong">{b.title}</td>
+                  <td className="cell-muted">{b.author}</td>
+                  <td className="cell-small">{b.genre || '—'}</td>
+                  <td className="cell-small" style={{ fontFamily:"'Courier New',monospace" }}>{b.isbn || '—'}</td>
+                  <td className="text-center">{b.total_copies}</td>
+                  <td className="text-center">{b.available_copies}</td>
                   <td>
                     <span className={`badge ${b.available_copies > 0 ? 'badge-available' : 'badge-unavail'}`}>
                       {b.available_copies > 0 ? 'Available' : 'Out'}
                     </span>
                   </td>
                   <td>
-                    <div style={{ display:'flex', gap:8 }}>
+                    <div className="action-row">
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(b)}><Pencil size={13}/></button>
-                      <button className="btn btn-ghost btn-sm" style={{ color:'#8b1a1a' }} onClick={() => handleDelete(b)}><Trash2 size={13}/></button>
+                      <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(b)}><Trash2 size={13}/></button>
                     </div>
                   </td>
                 </tr>
@@ -113,11 +118,9 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
 
       {/* Pagination */}
       {pages > 1 && (
-        <div style={{ display:'flex', gap:8, marginTop:16, alignItems:'center' }}>
+        <div className="pagination">
           <button className="btn btn-ghost btn-sm" disabled={page === 1} onClick={() => setPage(p => p-1)}>← Prev</button>
-          <span style={{ fontFamily:"'Crimson Text',serif", color:'rgba(26,18,8,0.6)' }}>
-            Page {page} of {pages}
-          </span>
+          <span className="small-muted">Page {page} of {pages}</span>
           <button className="btn btn-ghost btn-sm" disabled={page === pages} onClick={() => setPage(p => p+1)}>Next →</button>
         </div>
       )}
@@ -129,6 +132,9 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
           onSaved={() => { setModal(null); load(); onAction(); }}
         />
       )}
+      <ConfirmDialog open={!!confirmDelete} title="Delete Book" message={confirmDelete ? `Delete "${confirmDelete.title}"?` : ''}
+        onConfirm={() => confirmDelete && doDelete(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
+      <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );
 }
@@ -151,12 +157,12 @@ function BookModal({ book, onClose, onSaved }: { book: Book | null; onClose: () 
   const handleSubmit = async () => {
     setSaving(true); setError('');
     const payload: any = {
-      title: form.title, author: form.author,
-      isbn: form.isbn || null, genre: form.genre || null,
-      publisher: form.publisher || null,
+      title: form.title.trim(), author: form.author.trim(),
+      isbn: form.isbn?.trim() || null, genre: form.genre?.trim() || null,
+      publisher: form.publisher?.trim() || null,
       published_year: form.published_year ? Number(form.published_year) : null,
       total_copies: Number(form.total_copies),
-      description: form.description || null,
+      description: form.description?.trim() || null,
     };
     try {
       if (book) await booksApi.update(book.id, payload);
@@ -168,15 +174,13 @@ function BookModal({ book, onClose, onSaved }: { book: Book | null; onClose: () 
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
-        <div style={{ padding:'24px 28px', borderBottom:'1px solid rgba(200,151,42,0.2)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.3rem' }}>
-            {book ? 'Edit Book' : 'Add New Book'}
-          </h2>
+      <div className="modal-box modal-max-600" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">{book ? 'Edit Book' : 'Add New Book'}</h2>
           <button onClick={onClose} className="btn btn-ghost btn-sm"><X size={16}/></button>
         </div>
-        <div style={{ padding:'24px 28px', display:'flex', flexDirection:'column', gap:14 }}>
-          {error && <div style={{ color:'#8b1a1a', fontFamily:"'Crimson Text',serif" }}>{error}</div>}
+        <div className="modal-content">
+          {error && <div className="modal-error">{error}</div>}
           {[
             { label:'Title *',       key:'title' },
             { label:'Author *',      key:'author' },
@@ -187,18 +191,18 @@ function BookModal({ book, onClose, onSaved }: { book: Book | null; onClose: () 
             { label:'Total Copies',  key:'total_copies' },
           ].map(({ label, key }) => (
             <div key={key}>
-              <label style={{ display:'block', fontFamily:"'Crimson Text',serif", fontWeight:600, marginBottom:4, fontSize:'0.9rem', color:'rgba(26,18,8,0.7)' }}>{label}</label>
+              <label className="form-label">{label}</label>
               <input className="library-input" value={(form as any)[key]} onChange={set(key)} />
             </div>
           ))}
           <div>
-            <label style={{ display:'block', fontFamily:"'Crimson Text',serif", fontWeight:600, marginBottom:4, fontSize:'0.9rem', color:'rgba(26,18,8,0.7)' }}>Description</label>
+            <label className="form-label">Description</label>
             <textarea className="library-input" rows={3} value={form.description} onChange={set('description')} />
           </div>
         </div>
-        <div style={{ padding:'16px 28px', borderTop:'1px solid rgba(200,151,42,0.2)', display:'flex', gap:10, justifyContent:'flex-end' }}>
+        <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || !form.title || !form.author}>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || !form.title.trim() || !form.author.trim()}>
             {saving ? 'Saving…' : book ? 'Save Changes' : 'Add Book'}
           </button>
         </div>
@@ -206,3 +210,4 @@ function BookModal({ book, onClose, onSaved }: { book: Book | null; onClose: () 
     </div>
   );
 }
+

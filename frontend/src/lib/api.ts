@@ -1,7 +1,13 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const API_PREFIX = '/api/v1';
+export const ENDPOINTS = {
+  members: '/members',
+  books: '/books',
+  loans: '/loans',
+};
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}/api/v1${path}`, {
+  const res = await fetch(`${API_BASE}${API_PREFIX}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   });
