@@ -9,3 +9,10 @@ python-multipart==0.0.17
 httpx==0.28.1
 greenlet==3.1.1
 email-validator==2.3.0
+psycopg2-binary==2.9.10      # Alembic sync driver for migrations
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+httpx==0.28.1                 # AsyncClient for API tests
+pytest==8.3.4
+pytest-asyncio==0.24.0
+aiosqlite==0.20.0             # SQLite async backend for in-memory test DB

@@ -1,31 +1,45 @@
+"""
+app/services/member_service.py
+────────────────────────────────────────────────────────────────────────────
+Member business logic.
+
+This module contains ONLY domain rules — it never imports SQLAlchemy or
+constructs SQL.  All persistence is delegated to MemberRepository.
+"""
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Optional
 
-from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import Loan, Member
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.models.models import Member
+from app.repositories.member_repository import MemberRepository
 from app.schemas.schemas import MemberCreate, MemberOut, MemberUpdate, PagedResponse
-from app.core.exceptions import NotFoundError, ConflictError
+
+logger = logging.getLogger(__name__)
+
+
+def _pages(total: int, size: int) -> int:
+    return max(1, -(-total // size))
 
 
 async def create_member(db: AsyncSession, data: MemberCreate) -> Member:
-    # Check email uniqueness
-    existing = await db.scalar(select(Member).where(Member.email == data.email))
-    if existing:
+    repo = MemberRepository(db)
+    logger.info("Creating member email=%s", data.email)
+
+    if await repo.get_by_email(data.email):
         raise ConflictError(f"Email '{data.email}' is already registered.")
 
     member = Member(**data.model_dump())
-    db.add(member)
-    await db.flush()
-    await db.refresh(member)
-    return member
+    return await repo.add(member)
 
 
 async def get_member(db: AsyncSession, member_id: uuid.UUID) -> Member:
-    member = await db.get(Member, member_id)
+    repo = MemberRepository(db)
+    member = await repo.get_by_id(member_id)
     if not member:
         raise NotFoundError(f"Member {member_id} not found.")
     return member
@@ -34,19 +48,18 @@ async def get_member(db: AsyncSession, member_id: uuid.UUID) -> Member:
 async def update_member(
     db: AsyncSession, member_id: uuid.UUID, data: MemberUpdate
 ) -> Member:
+    repo = MemberRepository(db)
     member = await get_member(db, member_id)
 
     if data.email and data.email != member.email:
-        clash = await db.scalar(select(Member).where(Member.email == data.email))
-        if clash:
+        if await repo.get_by_email(data.email):
             raise ConflictError(f"Email '{data.email}' is already registered.")
 
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(member, field, value)
 
-    await db.flush()
-    await db.refresh(member)
-    return member
+    logger.info("Updated member id=%s", member_id)
+    return await repo.flush_and_refresh(member)
 
 
 async def list_members(
@@ -56,30 +69,10 @@ async def list_members(
     search: Optional[str] = None,
     active_only: bool = False,
 ) -> PagedResponse[MemberOut]:
-    q = select(Member)
-    if search:
-        q = q.where(
-            Member.name.ilike(f"%{search}%") | Member.email.ilike(f"%{search}%")
-        )
-    if active_only:
-        q = q.where(Member.is_active.is_(True))
+    repo = MemberRepository(db)
+    rows, total = await repo.search(page, size, search, active_only)
 
-    total = await db.scalar(select(func.count()).select_from(q.subquery()))
-    rows = (
-        await db.execute(q.order_by(Member.name).offset((page - 1) * size).limit(size))
-    ).scalars().all()
-
-    # Count active loans per member
-    active_counts: dict[uuid.UUID, int] = {}
-    if rows:
-        ids = [m.id for m in rows]
-        counts_q = (
-            select(Loan.member_id, func.count().label("cnt"))
-            .where(Loan.member_id.in_(ids), Loan.returned_at.is_(None))
-            .group_by(Loan.member_id)
-        )
-        for mid, cnt in (await db.execute(counts_q)).all():
-            active_counts[mid] = cnt
+    active_counts = await repo.active_loan_counts([m.id for m in rows])
 
     items = []
     for m in rows:
@@ -89,20 +82,19 @@ async def list_members(
 
     return PagedResponse(
         items=items,
-        total=total or 0,
+        total=total,
         page=page,
         size=size,
-        pages=max(1, -(-( total or 1) // size)),
+        pages=_pages(total, size),
     )
 
 
 async def delete_member(db: AsyncSession, member_id: uuid.UUID) -> None:
+    repo = MemberRepository(db)
     member = await get_member(db, member_id)
-    active = await db.scalar(
-        select(func.count()).where(
-            Loan.member_id == member_id, Loan.returned_at.is_(None)
-        )
-    )
-    if active:
+
+    if await repo.active_loan_count(member_id):
         raise ConflictError("Cannot delete a member with active loans.")
-    await db.delete(member)
+
+    logger.info("Deleting member id=%s", member_id)
+    await repo.delete(member)

@@ -7,252 +7,216 @@ A full-stack library management application built with **Python (FastAPI)**, **P
 ## Architecture Overview
 
 ```
-numino-library-app/
-├── backend/                  # Python FastAPI REST API
+library-app/
+├── backend/
+│   ├── alembic/                    # Migrations — single schema source of truth
+│   │   ├── env.py                  # Async-aware Alembic env (reads ORM metadata)
+│   │   └── versions/
+│   │       └── 0001_initial_schema.py
 │   ├── app/
-│   │   ├── api/routes/       # HTTP route handlers
+│   │   ├── api/routes/             # HTTP route handlers (thin — delegate to services)
 │   │   │   ├── books.py
-│   │   │   ├── members.py
-│   │   │   └── loans.py
+│   │   │   ├── loans.py
+│   │   │   └── members.py
 │   │   ├── core/
-│   │   │   ├── config.py     # Pydantic settings (env vars)
-│   │   │   └── exceptions.py # Domain exceptions
+│   │   │   ├── config.py           # Pydantic settings (env vars)
+│   │   │   ├── exceptions.py       # Domain exceptions with http_status codes
+│   │   │   ├── logging.py          # configure_logging(), _RequestIdFilter
+│   │   │   └── middleware.py       # RequestLoggingMiddleware (request-id, timing)
 │   │   ├── db/
-│   │   │   └── session.py    # Async SQLAlchemy engine + session
+│   │   │   └── session.py          # Async SQLAlchemy engine + session + Base
 │   │   ├── models/
-│   │   │   └── models.py     # ORM models (Member, Book, Loan)
+│   │   │   └── models.py           # ORM models (authoritative schema definition)
+│   │   ├── repositories/           # ← NEW: persistence layer
+│   │   │   ├── base.py             # Generic BaseRepository[T]
+│   │   │   ├── book_repository.py
+│   │   │   ├── loan_repository.py
+│   │   │   └── member_repository.py
 │   │   ├── schemas/
-│   │   │   └── schemas.py    # Pydantic request/response schemas
-│   │   ├── services/
-│   │   │   ├── member_service.py
+│   │   │   └── schemas.py          # Pydantic request/response schemas
+│   │   ├── services/               # Business logic only — no SQLAlchemy imports
 │   │   │   ├── book_service.py
-│   │   │   └── loan_service.py
-│   │   └── main.py           # FastAPI app, CORS, exception handlers
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/                 # Next.js 14 App Router
-│   ├── src/
-│   │   ├── app/              # Next.js app directory
-│   │   ├── components/
-│   │   │   ├── books/
-│   │   │   ├── members/
-│   │   │   └── lending/
-│   │   └── lib/
-│   │       └── api.ts        # Typed API client
-│   └── Dockerfile
+│   │   │   ├── loan_service.py
+│   │   │   └── member_service.py
+│   │   └── main.py                 # App factory, middleware, exception handlers
+│   ├── tests/
+│   │   ├── conftest.py             # Fixtures: in-memory SQLite DB, AsyncClient
+│   │   ├── test_books.py           # Book endpoint integration tests
+│   │   ├── test_loans.py           # Loan endpoint integration tests
+│   │   ├── test_members.py         # Member endpoint integration tests
+│   │   └── test_unit.py            # Pure unit tests (fine calc, schemas, exceptions)
+│   ├── alembic.ini
+│   ├── pytest.ini
+│   └── requirements.txt
+├── frontend/                       # Next.js 14 App Router
 ├── scripts/
-│   ├── schema.sql            # PostgreSQL DDL + seed data
-│   └── test_api.py           # CLI smoke-test script
-├── docker-compose.yml
-└── .env.example
+│   ├── schema.sql                  # REFERENCE ONLY — see note below
+│   └── test_api.py
+└── docker-compose.yml
 ```
 
 ---
 
-## Database Schema
+## Key Design Decisions (Review Feedback)
 
-### `members`
-| Column            | Type           | Notes                          |
-|-------------------|----------------|--------------------------------|
-| id                | UUID (PK)      | Auto-generated                 |
-| name              | VARCHAR(255)   | Required                       |
-| email             | VARCHAR(255)   | Required, unique               |
-| phone             | VARCHAR(30)    | Optional                       |
-| address           | TEXT           | Optional                       |
-| membership_date   | DATE           | Default: today                 |
-| is_active         | BOOLEAN        | Default: true                  |
-| created_at        | TIMESTAMPTZ    |                                |
-| updated_at        | TIMESTAMPTZ    | Auto-updated via trigger       |
+### 1. Logging & Error Handling
 
-### `books`
-| Column            | Type           | Notes                          |
-|-------------------|----------------|--------------------------------|
-| id                | UUID (PK)      |                                |
-| title             | VARCHAR(500)   | Required                       |
-| author            | VARCHAR(255)   | Required                       |
-| isbn              | VARCHAR(20)    | Unique                         |
-| genre             | VARCHAR(100)   |                                |
-| publisher         | VARCHAR(255)   |                                |
-| published_year    | SMALLINT       |                                |
-| total_copies      | SMALLINT       | ≥ 1                            |
-| available_copies  | SMALLINT       | 0 ≤ avail ≤ total              |
-| description       | TEXT           |                                |
+- **`app/core/logging.py`** — `configure_logging()` is called once at startup
+  (before any import that logs). All modules use `logging.getLogger(__name__)`.
+- **`app/core/middleware.py`** — `RequestLoggingMiddleware` mints a UUID4
+  request-id, stores it in a `ContextVar`, and injects it into every log line
+  emitted during that request via `_RequestIdFilter`. The ID is also echoed in
+  the `X-Request-Id` response header for distributed tracing.
+- **All domain exceptions** now have an `http_status` attribute so the HTTP
+  mapping lives in one place (the exception class), not in the handler.
+- **`ValidationError` is now fully registered** alongside `NotFoundError`,
+  `ConflictError`, `RequestValidationError` (FastAPI), and `PydanticValidationError`.
+  A generic `LibraryError` catch-all handles any future subclass automatically.
 
-### `loans`
-| Column            | Type           | Notes                          |
-|-------------------|----------------|--------------------------------|
-| id                | UUID (PK)      |                                |
-| member_id         | UUID (FK)      | → members.id                   |
-| book_id           | UUID (FK)      | → books.id                     |
-| borrowed_at       | TIMESTAMPTZ    | Default: now                   |
-| due_date          | DATE           | Default: today + 14 days       |
-| returned_at       | TIMESTAMPTZ    | NULL while active              |
-| fine_amount       | NUMERIC(8,2)   | Calculated on return           |
-| fine_paid         | BOOLEAN        |                                |
-| notes             | TEXT           |                                |
+### 2. Single Schema Source of Truth
 
-A **partial unique index** prevents the same member borrowing the same book twice (while active).
+The previous codebase had three competing definitions of the schema:
+- `scripts/schema.sql` (raw DDL)
+- `app/models/models.py` (ORM)
+- `alembic/` was present in requirements but never wired up
 
----
+**Resolution:**
+- **ORM models** are the authoritative schema definition.
+- **Alembic** reads `Base.metadata` via `env.py` and generates migrations from
+  it — so `autogenerate` will always detect ORM↔DB drift.
+- `scripts/schema.sql` is now a reference-only file with a clear warning header.
+  It must never be used to `CREATE TABLE` directly.
 
-## REST API Endpoints
+### 3. Repository Layer
 
-### Members — `/api/v1/members`
-| Method   | Path                    | Description               |
-|----------|-------------------------|---------------------------|
-| `POST`   | `/members`              | Register a new member     |
-| `GET`    | `/members`              | List members (paginated)  |
-| `GET`    | `/members/{id}`         | Get member by ID          |
-| `PATCH`  | `/members/{id}`         | Update member details     |
-| `DELETE` | `/members/{id}`         | Remove member             |
+Services previously mixed business logic with raw SQLAlchemy queries. Now:
 
-### Books — `/api/v1/books`
-| Method   | Path                    | Description               |
-|----------|-------------------------|---------------------------|
-| `POST`   | `/books`                | Add a book                |
-| `GET`    | `/books`                | List books (paginated)    |
-| `GET`    | `/books/{id}`           | Get book by ID            |
-| `PATCH`  | `/books/{id}`           | Update book details       |
-| `DELETE` | `/books/{id}`           | Remove book               |
+| Layer | Responsibility | Imports |
+|-------|---------------|---------|
+| **Routes** | HTTP binding, request/response mapping | FastAPI, schemas |
+| **Services** | Domain rules, orchestration, validation | repositories, exceptions |
+| **Repositories** | SQL queries, ORM interactions | SQLAlchemy, models |
 
-### Loans — `/api/v1/loans`
-| Method   | Path                        | Description                    |
-|----------|-----------------------------|--------------------------------|
-| `POST`   | `/loans`                    | Borrow a book                  |
-| `GET`    | `/loans`                    | List loans (paginated, filter) |
-| `GET`    | `/loans/stats`              | Library-wide statistics        |
-| `GET`    | `/loans/{id}`               | Get loan by ID                 |
-| `POST`   | `/loans/{id}/return`        | Return a book                  |
-| `POST`   | `/loans/{id}/pay-fine`      | Mark fine as paid              |
+This means services can be tested by injecting a mock repository (no DB needed),
+and all query changes are localised to one file per entity.
 
-**Query parameters for `GET /loans`:**
-- `member_id` — filter by member
-- `book_id` — filter by book
-- `active_only=true` — currently out
-- `overdue_only=true` — past due date, not returned
+### 4. Tests
+
+Tests use **pytest-asyncio** + **HTTPX AsyncClient** + **in-memory SQLite** via
+`aiosqlite`. No external services are required.
+
+```
+tests/test_unit.py      Pure unit tests (no DB, no HTTP)
+tests/test_members.py   Members CRUD integration tests
+tests/test_books.py     Books CRUD integration tests
+tests/test_loans.py     Full borrow/return/fine lifecycle tests
+```
 
 ---
 
 ## Quick Start — Docker (Recommended)
 
-### Prerequisites
-- Docker ≥ 24 and Docker Compose ≥ 2.20
-
-### Steps
-
 ```bash
-# 1. Clone / unzip the project
-cd numino-library-app
-
-# 2. Copy environment config
 cp .env.example .env
-
-# 3. Start everything
 docker compose up --build
-
-# Services:
-#   PostgreSQL  → localhost:5432
-#   API         → http://localhost:8000
-#   Frontend    → http://localhost:3000
-#   Swagger UI  → http://localhost:8000/docs
+# API docs  → http://localhost:8000/docs
+# Frontend  → http://localhost:3000
 ```
 
-The schema and seed data are applied automatically on first run.
+Schema is applied via `alembic upgrade head` (runs inside the container on
+startup — see `Dockerfile CMD`).
 
 ---
 
-## Local Development (Without Docker)
+## Local Development
 
 ### Backend
 
 ```bash
 cd backend
-
-# Create and activate virtual environment
-python -m venv .venv
-source .venv/bin/activate         # Windows: .venv\Scripts\activate
-
-# Install dependencies
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # Set environment variables
 export DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/librarydb"
 export CORS_ORIGINS="http://localhost:3000"
 
-# Apply schema (requires running PostgreSQL)
-psql -U postgres -d librarydb -f ../scripts/schema.sql
+# Apply schema (single source of truth)
+alembic upgrade head
 
-# Start the API server
+# Start server
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend
+### Run Tests
 
 ```bash
-cd frontend
+cd backend
 
-# Install dependencies
-npm install
+# All tests (uses in-memory SQLite — no Postgres needed)
+pytest
 
-# Set API URL
-echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
-
-# Start dev server
-npm run dev
-# → http://localhost:3000
+# With coverage
+pytest --cov=app --cov-report=term-missing
 ```
 
-### PostgreSQL only (via Docker)
+### Generate a New Migration
+
+After changing `app/models/models.py`:
 
 ```bash
-docker run -d \
-  --name library_db \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=librarydb \
-  -p 5432:5432 \
-  postgres:16-alpine
+cd backend
+alembic revision --autogenerate -m "describe what changed"
+alembic upgrade head
 ```
 
 ---
 
-## Running the Smoke Test
+## REST API Endpoints
 
-With the API running:
+### Members `/api/v1/members`
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/members` | Register member |
+| GET | `/members` | List (search, active_only, paginated) |
+| GET | `/members/{id}` | Get by ID |
+| PATCH | `/members/{id}` | Update |
+| DELETE | `/members/{id}` | Delete (no active loans) |
 
-```bash
-python scripts/test_api.py
+### Books `/api/v1/books`
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/books` | Add book |
+| GET | `/books` | List (search, genre, available_only) |
+| GET | `/books/{id}` | Get by ID |
+| PATCH | `/books/{id}` | Update |
+| DELETE | `/books/{id}` | Delete (no active loans) |
+
+### Loans `/api/v1/loans`
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/loans` | Borrow a book |
+| GET | `/loans` | List (member_id, book_id, active_only, overdue_only) |
+| GET | `/loans/stats` | Library statistics |
+| GET | `/loans/{id}` | Get by ID |
+| POST | `/loans/{id}/return` | Return book + calculate fine |
+| POST | `/loans/{id}/pay-fine` | Mark fine paid |
+
+---
+
+## Error Response Format
+
+All errors return a consistent JSON body:
+
+```json
+{
+  "detail": "Human-readable message",
+  "code": "NOT_FOUND | CONFLICT | VALIDATION_ERROR | REQUEST_VALIDATION_ERROR",
+  "errors": [...]   // present for validation errors only
+}
 ```
 
-This will:
-1. Create a test member and book
-2. Borrow the book
-3. Attempt a duplicate borrow (should return 409)
-4. Return the book
-5. Check library stats
-6. Clean up test data
-
----
-
-## Interactive API Documentation
-
-Once the server is running, visit:
-
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
----
-
-## Business Rules
-
-| Rule | Details |
-|------|---------|
-| Loan period | 14 days (configurable via `LOAN_PERIOD_DAYS`) |
-| Fine rate | $1.00/day overdue (configurable via `FINE_RATE_PER_DAY`) |
-| Duplicate loans | A member cannot borrow the same book twice (enforced at DB + API level) |
-| Unavailable books | Borrowing fails if `available_copies == 0` |
-| Inactive members | Inactive members cannot borrow books |
-| Delete protection | Members with active loans and books on active loan cannot be deleted |
+The `X-Request-Id` header is always present in responses for log correlation.
 
 ---
 
@@ -260,25 +224,10 @@ Once the server is running, visit:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | (postgres URL) | Async SQLAlchemy connection string |
+| `DATABASE_URL` | postgres URL | Async SQLAlchemy URL |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 | `FINE_RATE_PER_DAY` | `1.00` | USD fine per overdue day |
-| `LOAN_PERIOD_DAYS` | `14` | Default loan period |
-| `SECRET_KEY` | `changeme` | App secret (for future auth) |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | API base URL for the frontend |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| API framework | FastAPI 0.115 |
-| ORM | SQLAlchemy 2.0 (async) |
-| Database | PostgreSQL 16 |
-| Validation | Pydantic v2 |
-| ASGI server | Uvicorn |
-| Frontend | Next.js 14 (App Router) |
-| Styling | Tailwind CSS |
-| Icons | Lucide React |
-| Containerization | Docker + Docker Compose |
+| `LOAN_PERIOD_DAYS` | `14` | Loan duration in days |
+| `DEBUG` | `false` | Enables DEBUG log level + SQLAlchemy echo |
+| `SECRET_KEY` | `changeme` | Reserved for future auth |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend API base URL |
