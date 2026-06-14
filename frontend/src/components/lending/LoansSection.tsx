@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, RotateCcw, DollarSign, X, Search } from 'lucide-react';
 import { loansApi, membersApi, booksApi, type Loan, type Member, type Book } from '@/lib/api';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import Toast from '@/components/ui/Toast';
+import { useUI } from '@/components/ui/UIProvider';
 
 export default function LoansSection({ onAction }: { onAction: () => void }) {
   const [loans, setLoans]     = useState<Loan[]>([]);
@@ -29,20 +28,19 @@ export default function LoansSection({ onAction }: { onAction: () => void }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const [confirmReturn, setConfirmReturn] = useState<Loan | null>(null);
   const [returningIds, setReturningIds] = useState<string[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
+  const { showToast, confirm } = useUI();
 
   const doReturn = async (loan: Loan) => {
     setReturningIds(ids => [...ids, loan.id]);
     try { await loansApi.return(loan.id); load(); onAction(); }
-    catch (e: any) { setToast(e.message || 'Failed to return'); }
-    finally { setReturningIds(ids => ids.filter(i => i !== loan.id)); setConfirmReturn(null); }
+    catch (e: any) { showToast(e.message || 'Failed to return'); }
+    finally { setReturningIds(ids => ids.filter(i => i !== loan.id)); }
   };
 
   const handlePayFine = async (loan: Loan) => {
     try { await loansApi.payFine(loan.id); load(); onAction(); }
-    catch (e: any) { setToast(e.message || 'Failed to process fine'); }
+    catch (e: any) { showToast(e.message || 'Failed to process fine'); }
   };
 
   const pages = Math.max(1, Math.ceil(total / SIZE));
@@ -97,15 +95,17 @@ export default function LoansSection({ onAction }: { onAction: () => void }) {
                       <div className="cell-strong">{loan.book_title}</div>
                       <div className="cell-sub">{loan.book_author}</div>
                     </td>
-                    <td className="cell-muted">{loan.member_name}</td>
-                    <td className="cell-small">{new Date(loan.borrowed_at).toLocaleDateString()}</td>
-                    <td className={`cell-small ${isOverdue ? '' : ''}`} style={{ color: isOverdue ? '#8b1a1a' : undefined, fontWeight: isOverdue ? 600 : undefined }}>
+                    <td style={{ color:'rgba(26,18,8,0.7)' }}>{loan.member_name}</td>
+                    <td style={{ fontSize:'0.88rem', color:'rgba(26,18,8,0.55)' }}>
+                      {new Date(loan.borrowed_at).toLocaleDateString()}
+                    </td>
+                    <td style={{ fontSize:'0.88rem', color: isOverdue ? '#8b1a1a' : 'rgba(26,18,8,0.55)', fontWeight: isOverdue ? 600 : 400 }}>
                       {new Date(loan.due_date).toLocaleDateString()}
                     </td>
                     <td className="cell-small">{loan.returned_at ? new Date(loan.returned_at).toLocaleDateString() : '—'}</td>
                     <td>
                       {fine > 0 ? (
-                        <span className="fine-amount" style={{ color: loan.fine_paid ? '#2d5016' : '#8b1a1a' }}>
+                        <span style={{ color: loan.fine_paid ? '#2d5016' : '#8b1a1a', fontWeight:600 }}>
                           ${fine.toFixed(2)} {loan.fine_paid ? '✓' : ''}
                         </span>
                       ) : '—'}
@@ -118,7 +118,7 @@ export default function LoansSection({ onAction }: { onAction: () => void }) {
                     <td>
                       <div className="action-row">
                         {isActive && (
-                          <button className="btn btn-ghost btn-sm" title="Return book" onClick={() => setConfirmReturn(loan)} disabled={returningIds.includes(loan.id)}>
+                          <button className="btn btn-ghost btn-sm" title="Return book" onClick={() => handleReturn(loan)}>
                             <RotateCcw size={13}/>
                           </button>
                         )}
@@ -151,10 +151,6 @@ export default function LoansSection({ onAction }: { onAction: () => void }) {
           onSaved={() => { setModal(false); load(); onAction(); }}
         />
       )}
-
-      <ConfirmDialog open={!!confirmReturn} title="Return Book" message={confirmReturn ? `Return "${confirmReturn.book_title}"?` : ''}
-        onConfirm={() => confirmReturn && doReturn(confirmReturn)} onCancel={() => setConfirmReturn(null)} />
-      <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );
 }
@@ -193,36 +189,33 @@ function BorrowModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     finally { setSaving(false); }
   };
 
-  const selStyle = (selected: boolean): React.CSSProperties => ({
-    padding:'10px 14px', cursor:'pointer', borderRadius:2, marginBottom:2,
-    background: selected ? 'rgba(200,151,42,0.15)' : 'transparent',
-    borderLeft: selected ? '3px solid #c8972a' : '3px solid transparent',
-    fontFamily:"'Crimson Text',serif",
-  });
+  const selClass = (selected: boolean) => selected ? 'list-item selected' : 'list-item';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-max-600" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 style={{ fontSize:'1.3rem' }}>Record New Loan</h2>
+      <div className="modal-box" style={{ maxWidth:600 }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding:'24px 28px', borderBottom:'1px solid rgba(200,151,42,0.2)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.3rem' }}>Record New Loan</h2>
           <button onClick={onClose} className="btn btn-ghost btn-sm"><X size={16}/></button>
         </div>
 
         <div className="modal-content-grid">
           {/* Member picker */}
           <div>
-            <label className="form-label">Select Member *</label>
-            <div className="input-with-icon" style={{ marginBottom:8 }}>
-              <Search size={13} className="icon-left" />
-              <input className="library-input with-pad input-small" placeholder="Search members…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} />
+            <label style={{ display:'block', fontFamily:"'Crimson Text',serif", fontWeight:600, marginBottom:6, fontSize:'0.9rem', color:'rgba(26,18,8,0.7)' }}>
+              Select Member *
+            </label>
+            <div style={{ position:'relative', marginBottom:8 }}>
+              <Search size={13} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'rgba(26,18,8,0.4)' }}/>
+              <input className="library-input" style={{ paddingLeft:28, fontSize:'0.88rem' }} placeholder="Search members…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} />
             </div>
             <div className="list-box">
               {filteredMembers.length === 0 ? (
                 <div className="list-empty">No active members</div>
               ) : filteredMembers.map(m => (
                 <div key={m.id} style={selStyle(memberId === m.id)} onClick={() => setMemberId(m.id)}>
-                  <div className="list-item-title">{m.name}</div>
-                  <div className="list-item-sub">{m.email}</div>
+                  <div style={{ fontWeight:600, fontSize:'0.92rem' }}>{m.name}</div>
+                  <div style={{ fontSize:'0.8rem', color:'rgba(26,18,8,0.55)' }}>{m.email}</div>
                 </div>
               ))}
             </div>
@@ -230,18 +223,20 @@ function BorrowModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
           {/* Book picker */}
           <div>
-            <label className="form-label">Select Book *</label>
-            <div className="input-with-icon" style={{ marginBottom:8 }}>
-              <Search size={13} className="icon-left" />
-              <input className="library-input with-pad input-small" placeholder="Search available books…" value={bookSearch} onChange={e => setBookSearch(e.target.value)} />
+            <label style={{ display:'block', fontFamily:"'Crimson Text',serif", fontWeight:600, marginBottom:6, fontSize:'0.9rem', color:'rgba(26,18,8,0.7)' }}>
+              Select Book *
+            </label>
+            <div style={{ position:'relative', marginBottom:8 }}>
+              <Search size={13} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'rgba(26,18,8,0.4)' }}/>
+              <input className="library-input" style={{ paddingLeft:28, fontSize:'0.88rem' }} placeholder="Search available books…" value={bookSearch} onChange={e => setBookSearch(e.target.value)} />
             </div>
             <div className="list-box">
               {filteredBooks.length === 0 ? (
                 <div className="list-empty">No available books</div>
               ) : filteredBooks.map(b => (
                 <div key={b.id} style={selStyle(bookId === b.id)} onClick={() => setBookId(b.id)}>
-                  <div className="list-item-title">{b.title}</div>
-                  <div className="list-item-sub">{b.author} · {b.available_copies} avail.</div>
+                  <div style={{ fontWeight:600, fontSize:'0.92rem' }}>{b.title}</div>
+                  <div style={{ fontSize:'0.8rem', color:'rgba(26,18,8,0.55)' }}>{b.author} · {b.available_copies} avail.</div>
                 </div>
               ))}
             </div>

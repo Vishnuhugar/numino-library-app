@@ -37,43 +37,15 @@ export default function Home() {
   return (
     <div className="flex min-h-screen">
   {/* ── Sidebar ─────────────────────────────────────────── */}
-  <aside
-    style={{ width: 240, background: '#1a1208', flexShrink: 0 }}
-    className="flex flex-col py-8 px-4"
-  >
+  <aside className="sidebar flex flex-col py-8 px-4">
     {/* Logo */}
     <div className="mb-8 px-2">
-      <div
-        className="text-2xl font-bold mb-0.5"
-        style={{
-          fontFamily: "'Playfair Display', serif",
-          color: '#c8972a',
-        }}
-      >
-        📚 LibraryOS
-      </div>
-
-      <div
-        style={{
-          color: 'rgba(253,246,227,0.45)',
-          fontSize: '0.78rem',
-          fontFamily: "'Crimson Text', serif",
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-        }}
-      >
-        Neighborhood Library
-      </div>
+      <div className="text-2xl font-bold mb-0.5 brand">📚 LibraryOS</div>
+      <div className="brand-sub">Neighborhood Library</div>
     </div>
 
     {/* Ornament */}
-    <div
-      style={{
-        height: 1,
-        background: 'rgba(200,151,42,0.3)',
-        margin: '0 8px 24px',
-      }}
-    />
+    <div className="separator" />
 
     {/* Nav */}
     <nav className="flex flex-col gap-1 flex-1">
@@ -90,24 +62,11 @@ export default function Home() {
     </nav>
 
     {/* Footer */}
-    <div
-      style={{
-        color: 'rgba(253,246,227,0.3)',
-        fontSize: '0.7rem',
-        fontFamily: "'Crimson Text', serif",
-        textAlign: 'center',
-        marginTop: 24,
-      }}
-    >
-      v1.0 · Library Management
-    </div>
+    <div className="sidebar-footer">v1.0 · Library Management</div>
   </aside>
 
   {/* ── Main Content ─────────────────────────────────────── */}
-  <main
-    className="flex-1 overflow-auto"
-    style={{ background: '#fdf6e3' }}
-  >
+  <main className="flex-1 overflow-auto">
     {section === 'dashboard' && (
       <Dashboard
         stats={stats}
@@ -148,12 +107,8 @@ function Dashboard({ stats, loading, onRefresh }: {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: '2rem', color: '#1a1208' }}>
-            Library Dashboard
-          </h1>
-          <div style={{ color: 'rgba(26,18,8,0.5)', fontFamily: "'Crimson Text', serif" }}>
-            An overview of library operations
-          </div>
+          <h1 className="page-title">Library Dashboard</h1>
+          <div className="page-sub">An overview of library operations</div>
         </div>
         <button onClick={onRefresh} className="btn btn-ghost btn-sm">
           <RefreshCw size={14} /> Refresh
@@ -162,29 +117,21 @@ function Dashboard({ stats, loading, onRefresh }: {
 
       {/* Ornamental rule */}
       <div className="ornamental-rule mb-8">
-        <span style={{ fontFamily: "'Playfair Display', serif", color: '#c8972a', fontSize: '1.1rem' }}>
-          ✦
-        </span>
+        <span className="ornament-icon">✦</span>
       </div>
 
       {/* Stat cards */}
       {loading ? (
-        <div style={{ color: 'rgba(26,18,8,0.45)', fontFamily: "'Crimson Text', serif", fontSize: '1.05rem' }}>
-          Loading statistics…
-        </div>
+        <div className="small-muted">Loading statistics…</div>
       ) : (
-        <div className="grid grid-cols-2 gap-6 mb-10" style={{ maxWidth: 700 }}>
+        <div className="grid grid-cols-2 gap-6 mb-10 constrain-700">
           {cards.map(c => (
             <div key={c.label} className="stat-card">
-              <div style={{ fontSize: '2rem', marginBottom: 4 }}>{c.icon}</div>
-              <div style={{ fontSize: '2.4rem', fontFamily: "'Playfair Display', serif",
-                            color: c.color, fontWeight: 700, lineHeight: 1 }}>
+              <div className="stat-icon">{c.icon}</div>
+              <div className={`stat-value ${c.color === '#2d5016' ? 'sv-green' : c.color === '#c8972a' ? 'sv-gold' : 'sv-red'}`}>
                 {c.value}
               </div>
-              <div style={{ color: 'rgba(26,18,8,0.55)', fontFamily: "'Crimson Text', serif",
-                            fontSize: '0.95rem', marginTop: 4 }}>
-                {c.label}
-              </div>
+              <div className="small-muted mt-4">{c.label}</div>
             </div>
           ))}
         </div>
@@ -192,15 +139,11 @@ function Dashboard({ stats, loading, onRefresh }: {
 
       {/* Overdue alert */}
       {stats && stats.overdue_loans > 0 && (
-        <div style={{ background: 'rgba(139,26,26,0.07)', border: '1px solid rgba(139,26,26,0.3)',
-                      borderRadius: 2, padding: '16px 20px', maxWidth: 700,
-                      display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <AlertTriangle size={20} style={{ color: '#8b1a1a', flexShrink: 0, marginTop: 2 }} />
+        <div className="overdue-alert">
+          <AlertTriangle size={20} className="alert-icon" />
           <div>
-            <div style={{ fontFamily: "'Playfair Display', serif", color: '#8b1a1a', fontWeight: 600 }}>
-              Overdue Items
-            </div>
-            <div style={{ fontFamily: "'Crimson Text', serif", color: 'rgba(26,18,8,0.7)', fontSize: '0.95rem' }}>
+            <div className="alert-title">Overdue Items</div>
+            <div className="alert-body">
               {stats.overdue_loans} loan{stats.overdue_loans > 1 ? 's are' : ' is'} past due.
               Outstanding fines: <strong>${Number(stats.total_fines).toFixed(2)}</strong>
             </div>
@@ -209,10 +152,10 @@ function Dashboard({ stats, loading, onRefresh }: {
       )}
 
       {/* Quick-start callouts */}
-      <div className="ornamental-rule my-8" style={{ maxWidth: 700 }}>
-        <span style={{ fontFamily: "'Playfair Display', serif", color: '#c8972a' }}>Quick Actions</span>
+      <div className="ornamental-rule my-8 constrain-700">
+        <span className="ornament-icon">Quick Actions</span>
       </div>
-      <div style={{ color: 'rgba(26,18,8,0.6)', fontFamily: "'Crimson Text', serif", maxWidth: 700 }}>
+      <div className="small-muted constrain-700">
         Use the sidebar to navigate between <em>Books</em>, <em>Members</em>, and <em>Loans</em>.
         All lending operations — borrowing, returning, and fine payments — are managed under <em>Loans</em>.
       </div>

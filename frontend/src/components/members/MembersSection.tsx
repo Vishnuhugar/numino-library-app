@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Pencil, Trash2, X, UserCheck, UserX } from 'lucide-react';
 import { membersApi, type Member } from '@/lib/api';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import Toast from '@/components/ui/Toast';
+import { useUI } from '@/components/ui/UIProvider';
 
 export default function MembersSection({ onAction }: { onAction: () => void }) {
   const [members, setMembers] = useState<Member[]>([]);
@@ -31,22 +30,23 @@ export default function MembersSection({ onAction }: { onAction: () => void }) {
   useEffect(() => { load(); }, [load]);
 
   const handleDelete = async (m: Member) => {
-    setConfirmDelete(m);
+    const ok = await confirm({ title: 'Remove Member', message: `Remove member "${m.name}"?` });
+    if (!ok) return;
+    await doDelete(m);
   };
 
   const handleToggleActive = async (m: Member) => {
     try { await membersApi.update(m.id, { is_active: !m.is_active }); load(); }
-    catch (e: any) { setToast(e.message || 'Update failed'); }
+    catch (e: any) { showToast(e.message || 'Update failed'); }
   };
 
-  const [confirmDelete, setConfirmDelete] = useState<Member | null>(null);
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
+  const { confirm, showToast } = useUI();
   const doDelete = async (m: Member) => {
     setDeletingIds(ids => [...ids, m.id]);
     try { await membersApi.delete(m.id); load(); onAction(); }
-    catch (e: any) { setToast(e.message || 'Delete failed'); }
-    finally { setDeletingIds(ids => ids.filter(i => i !== m.id)); setConfirmDelete(null); }
+    catch (e: any) { showToast(e.message || 'Delete failed'); }
+    finally { setDeletingIds(ids => ids.filter(i => i !== m.id)); }
   };
 
   const pages = Math.max(1, Math.ceil(total / SIZE));
@@ -138,9 +138,7 @@ export default function MembersSection({ onAction }: { onAction: () => void }) {
           onSaved={() => { setModal(null); load(); onAction(); }}
         />
       )}
-      <ConfirmDialog open={!!confirmDelete} title="Remove Member" message={confirmDelete ? `Remove member "${confirmDelete.name}"?` : ''}
-        onConfirm={() => confirmDelete && doDelete(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
-      <Toast message={toast} onClose={() => setToast(null)} />
+      {/* Using UIProvider confirm/toast - no local dialogs here */}
     </div>
   );
 }

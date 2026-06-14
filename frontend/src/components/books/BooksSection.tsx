@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Pencil, Trash2, BookOpen, X } from 'lucide-react';
 import { booksApi, type Book } from '@/lib/api';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import Toast from '@/components/ui/Toast';
+import { useUI } from '@/components/ui/UIProvider';
 
 export default function BooksSection({ onAction }: { onAction: () => void }) {
   const [books, setBooks]     = useState<Book[]>([]);
@@ -33,16 +32,16 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
   const openCreate = () => { setSelected(null); setModal('create'); };
   const openEdit   = (b: Book) => { setSelected(b); setModal('edit'); };
 
-  const [confirmDelete, setConfirmDelete] = useState<Book | null>(null);
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
+  const { confirm, showToast } = useUI();
 
-  const handleDelete = async (b: Book) => setConfirmDelete(b);
-  const doDelete = async (b: Book) => {
+  const handleDelete = async (b: Book) => {
+    const ok = await confirm({ title: 'Delete Book', message: `Delete "${b.title}"?` });
+    if (!ok) return;
     setDeletingIds(ids => [...ids, b.id]);
     try { await booksApi.delete(b.id); load(); onAction(); }
-    catch (e: any) { setToast(e.message || 'Delete failed'); }
-    finally { setDeletingIds(ids => ids.filter(i => i !== b.id)); setConfirmDelete(null); }
+    catch (e: any) { showToast(e.message || 'Delete failed'); }
+    finally { setDeletingIds(ids => ids.filter(i => i !== b.id)); }
   };
 
   const pages = Math.max(1, Math.ceil(total / SIZE));
@@ -73,7 +72,7 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
         </label>
       </div>
 
-      {error && <div style={{ color:'#8b1a1a', marginBottom:12 }}>{error}</div>}
+      {error && <div className="error-msg">{error}</div>}
       {/* Table */}
       <div className="table-wrap">
         {loading ? (
@@ -95,7 +94,7 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
                   <td className="cell-strong">{b.title}</td>
                   <td className="cell-muted">{b.author}</td>
                   <td className="cell-small">{b.genre || '—'}</td>
-                  <td className="cell-small" style={{ fontFamily:"'Courier New',monospace" }}>{b.isbn || '—'}</td>
+                  <td className="cell-small mono">{b.isbn || '—'}</td>
                   <td className="text-center">{b.total_copies}</td>
                   <td className="text-center">{b.available_copies}</td>
                   <td>
@@ -132,9 +131,7 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
           onSaved={() => { setModal(null); load(); onAction(); }}
         />
       )}
-      <ConfirmDialog open={!!confirmDelete} title="Delete Book" message={confirmDelete ? `Delete "${confirmDelete.title}"?` : ''}
-        onConfirm={() => confirmDelete && doDelete(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
-      <Toast message={toast} onClose={() => setToast(null)} />
+      {/* Using UIProvider confirm/toast - no local dialogs here */}
     </div>
   );
 }
