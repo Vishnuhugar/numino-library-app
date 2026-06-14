@@ -118,7 +118,11 @@ export default function LoansSection({ onAction }: { onAction: () => void }) {
                     <td>
                       <div className="action-row">
                         {isActive && (
-                          <button className="btn btn-ghost btn-sm" title="Return book" onClick={() => handleReturn(loan)}>
+                          <button className="btn btn-ghost btn-sm" title="Return book" onClick={async () => {
+                            const ok = await confirm({ title: 'Return Book', message: `Return "${loan.book_title}"?` });
+                            if (!ok) return;
+                            await doReturn(loan);
+                          }}>
                             <RotateCcw size={13}/>
                           </button>
                         )}
@@ -179,6 +183,8 @@ function BorrowModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     !bookSearch || b.title.toLowerCase().includes(bookSearch.toLowerCase()) || b.author.toLowerCase().includes(bookSearch.toLowerCase())
   );
 
+  const selClass = (selected: boolean) => selected ? 'list-item selected' : 'list-item';
+
   const handleSubmit = async () => {
     if (!memberId || !bookId) { setError('Please select a member and a book.'); return; }
     setSaving(true); setError('');
@@ -189,33 +195,29 @@ function BorrowModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     finally { setSaving(false); }
   };
 
-  const selClass = (selected: boolean) => selected ? 'list-item selected' : 'list-item';
-
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{ maxWidth:600 }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding:'24px 28px', borderBottom:'1px solid rgba(200,151,42,0.2)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:'1.3rem' }}>Record New Loan</h2>
+      <div className="modal-box modal-max-600" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title modal-title-lg">Record New Loan</h2>
           <button onClick={onClose} className="btn btn-ghost btn-sm"><X size={16}/></button>
         </div>
 
         <div className="modal-content-grid">
           {/* Member picker */}
           <div>
-            <label style={{ display:'block', fontFamily:"'Crimson Text',serif", fontWeight:600, marginBottom:6, fontSize:'0.9rem', color:'rgba(26,18,8,0.7)' }}>
-              Select Member *
-            </label>
-            <div style={{ position:'relative', marginBottom:8 }}>
-              <Search size={13} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'rgba(26,18,8,0.4)' }}/>
-              <input className="library-input" style={{ paddingLeft:28, fontSize:'0.88rem' }} placeholder="Search members…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} />
+            <label className="form-label">Select Member *</label>
+            <div className="input-with-icon mb-8">
+              <Search size={13} className="icon-left" />
+              <input className="library-input with-pad input-small" placeholder="Search members…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} />
             </div>
             <div className="list-box">
               {filteredMembers.length === 0 ? (
                 <div className="list-empty">No active members</div>
               ) : filteredMembers.map(m => (
-                <div key={m.id} style={selStyle(memberId === m.id)} onClick={() => setMemberId(m.id)}>
-                  <div style={{ fontWeight:600, fontSize:'0.92rem' }}>{m.name}</div>
-                  <div style={{ fontSize:'0.8rem', color:'rgba(26,18,8,0.55)' }}>{m.email}</div>
+                <div key={m.id} className={selClass(memberId === m.id)} onClick={() => setMemberId(m.id)}>
+                  <div className="list-item-title">{m.name}</div>
+                  <div className="list-item-sub">{m.email}</div>
                 </div>
               ))}
             </div>
@@ -223,20 +225,18 @@ function BorrowModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
           {/* Book picker */}
           <div>
-            <label style={{ display:'block', fontFamily:"'Crimson Text',serif", fontWeight:600, marginBottom:6, fontSize:'0.9rem', color:'rgba(26,18,8,0.7)' }}>
-              Select Book *
-            </label>
-            <div style={{ position:'relative', marginBottom:8 }}>
-              <Search size={13} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'rgba(26,18,8,0.4)' }}/>
-              <input className="library-input" style={{ paddingLeft:28, fontSize:'0.88rem' }} placeholder="Search available books…" value={bookSearch} onChange={e => setBookSearch(e.target.value)} />
+            <label className="form-label">Select Book *</label>
+            <div className="input-with-icon mb-8">
+              <Search size={13} className="icon-left" />
+              <input className="library-input with-pad input-small" placeholder="Search available books…" value={bookSearch} onChange={e => setBookSearch(e.target.value)} />
             </div>
             <div className="list-box">
               {filteredBooks.length === 0 ? (
                 <div className="list-empty">No available books</div>
               ) : filteredBooks.map(b => (
-                <div key={b.id} style={selStyle(bookId === b.id)} onClick={() => setBookId(b.id)}>
-                  <div style={{ fontWeight:600, fontSize:'0.92rem' }}>{b.title}</div>
-                  <div style={{ fontSize:'0.8rem', color:'rgba(26,18,8,0.55)' }}>{b.author} · {b.available_copies} avail.</div>
+                <div key={b.id} className={selClass(bookId === b.id)} onClick={() => setBookId(b.id)}>
+                  <div className="list-item-title">{b.title}</div>
+                  <div className="list-item-sub">{b.author} · {b.available_copies} avail.</div>
                 </div>
               ))}
             </div>
