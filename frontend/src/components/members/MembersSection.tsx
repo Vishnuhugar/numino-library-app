@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Pencil, Trash2, X, UserCheck, UserX } from 'lucide-react';
 import { membersApi, type Member } from '@/lib/api';
 import { useUI } from '@/components/ui/UIProvider';
+import DataTable from '@/components/ui/DataTable';
+import ModalForm from '@/components/ui/ModalForm';
 
 export default function MembersSection({ onAction }: { onAction: () => void }) {
   const [members, setMembers] = useState<Member[]>([]);
@@ -84,42 +86,29 @@ export default function MembersSection({ onAction }: { onAction: () => void }) {
         ) : members.length === 0 ? (
           <div className="loading-empty">No members found.</div>
         ) : (
-          <table className="lib-table">
-            <thead>
-                  <tr>
-                    <th>Name</th><th>Email</th><th>Phone</th>
-                    <th>Member Since</th><th className="text-center">Active Loans</th>
-                    <th>Status</th><th></th>
-                  </tr>
-            </thead>
-            <tbody>
-              {members.map(m => (
-                <tr key={m.id}>
-                  <td className="cell-strong">{m.name}</td>
-                  <td className="cell-muted">{m.email}</td>
-                  <td className="cell-muted">{m.phone || '—'}</td>
-                  <td className="cell-small">
-                    {new Date(m.membership_date).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })}
-                  </td>
-                  <td className="text-center">{m.active_loans}</td>
-                  <td>
-                    <span className={`badge ${m.is_active ? 'badge-available' : 'badge-unavail'}`}>
-                      {m.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="action-row">
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setSelected(m); setModal('edit'); }}><Pencil size={13}/></button>
-                      <button className="btn btn-ghost btn-sm" title={m.is_active ? 'Deactivate' : 'Activate'} onClick={() => handleToggleActive(m)}>
-                        {m.is_active ? <UserX size={13} className="icon-danger"/> : <UserCheck size={13} className="icon-ok"/>}
-                      </button>
-                      <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(m)}><Trash2 size={13}/></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable<Member>
+            columns={[
+              { key: 'name', title: 'Name', render: (m) => <div className="cell-strong">{m.name}</div> },
+              { key: 'email', title: 'Email', render: (m) => <div className="cell-muted">{m.email}</div> },
+              { key: 'phone', title: 'Phone', render: (m) => m.phone || '—' },
+              { key: 'since', title: 'Member Since', render: (m) => new Date(m.membership_date).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) },
+              { key: 'active_loans', title: 'Active Loans', className: 'text-center', render: (m) => m.active_loans },
+              { key: 'status', title: 'Status', render: (m) => (
+                <span className={`badge ${m.is_active ? 'badge-available' : 'badge-unavail'}`}>{m.is_active ? 'Active' : 'Inactive'}</span>
+              )},
+              { key: 'actions', title: '', render: (m) => (
+                <div className="action-row">
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setSelected(m); setModal('edit'); }}><Pencil size={13}/></button>
+                  <button className="btn btn-ghost btn-sm" title={m.is_active ? 'Deactivate' : 'Activate'} onClick={() => handleToggleActive(m)}>
+                    {m.is_active ? <UserX size={13} className="icon-danger"/> : <UserCheck size={13} className="icon-ok"/>}
+                  </button>
+                  <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(m)}><Trash2 size={13}/></button>
+                </div>
+              )},
+            ]}
+            data={members}
+            rowKey={(r) => (r as any).id}
+          />
         )}
       </div>
 
@@ -131,13 +120,9 @@ export default function MembersSection({ onAction }: { onAction: () => void }) {
         </div>
       )}
 
-      {modal && (
-        <MemberModal
-          member={selected}
-          onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); load(); onAction(); }}
-        />
-      )}
+      <ModalForm open={!!modal} title={modal === 'create' ? 'Register New Member' : 'Edit Member'} onClose={() => setModal(null)}>
+        <MemberModal member={selected} onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); onAction(); }} />
+      </ModalForm>
       {/* Using UIProvider confirm/toast - no local dialogs here */}
     </div>
   );

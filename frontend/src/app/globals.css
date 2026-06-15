@@ -258,6 +258,10 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Loan / fine helpers */
 .due-overdue { color: var(--red); font-weight: 600; }
+
+.error-stack { white-space: pre-wrap; margin-top: 12px; font-family: 'Crimson Text', serif; color: rgba(26,18,8,0.8); }
+.confirm-message { margin-bottom: 8px; }
+
 .fine-paid { color: var(--green); }
 .fine-unpaid { color: var(--red); }
 

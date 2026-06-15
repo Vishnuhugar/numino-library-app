@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Pencil, Trash2, BookOpen, X } from 'lucide-react';
 import { booksApi, type Book } from '@/lib/api';
 import { useUI } from '@/components/ui/UIProvider';
+import DataTable from '@/components/ui/DataTable';
+import ModalForm from '@/components/ui/ModalForm';
 
 export default function BooksSection({ onAction }: { onAction: () => void }) {
   const [books, setBooks]     = useState<Book[]>([]);
@@ -80,38 +82,29 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
         ) : books.length === 0 ? (
           <div className="loading-empty">No books found.</div>
         ) : (
-          <table className="lib-table">
-            <thead>
-              <tr>
-                <th>Title</th><th>Author</th><th>Genre</th><th>ISBN</th>
-                <th className="text-center">Copies</th><th className="text-center">Available</th>
-                <th>Status</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {books.map(b => (
-                <tr key={b.id}>
-                  <td className="cell-strong">{b.title}</td>
-                  <td className="cell-muted">{b.author}</td>
-                  <td className="cell-small">{b.genre || '—'}</td>
-                  <td className="cell-small mono">{b.isbn || '—'}</td>
-                  <td className="text-center">{b.total_copies}</td>
-                  <td className="text-center">{b.available_copies}</td>
-                  <td>
-                    <span className={`badge ${b.available_copies > 0 ? 'badge-available' : 'badge-unavail'}`}>
-                      {b.available_copies > 0 ? 'Available' : 'Out'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="action-row">
-                      <button className="btn btn-ghost btn-sm" onClick={() => openEdit(b)}><Pencil size={13}/></button>
-                      <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(b)}><Trash2 size={13}/></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable<Book>
+            columns={[
+              { key: 'title', title: 'Title', render: (b) => <div className="cell-strong">{b.title}</div> },
+              { key: 'author', title: 'Author', render: (b) => <div className="cell-muted">{b.author}</div> },
+              { key: 'genre', title: 'Genre', render: (b) => b.genre || '—' },
+              { key: 'isbn', title: 'ISBN', render: (b) => <span className="mono">{b.isbn || '—'}</span> },
+              { key: 'total_copies', title: 'Copies', className: 'text-center', render: (b) => b.total_copies },
+              { key: 'available_copies', title: 'Available', className: 'text-center', render: (b) => b.available_copies },
+              { key: 'status', title: 'Status', render: (b) => (
+                <span className={`badge ${b.available_copies > 0 ? 'badge-available' : 'badge-unavail'}`}>
+                  {b.available_copies > 0 ? 'Available' : 'Out'}
+                </span>
+              )},
+              { key: 'actions', title: '', render: (b) => (
+                <div className="action-row">
+                  <button className="btn btn-ghost btn-sm" onClick={() => openEdit(b)}><Pencil size={13}/></button>
+                  <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(b)}><Trash2 size={13}/></button>
+                </div>
+              )},
+            ]}
+            data={books}
+            rowKey={(r) => (r as any).id}
+          />
         )}
       </div>
 
@@ -124,13 +117,14 @@ export default function BooksSection({ onAction }: { onAction: () => void }) {
         </div>
       )}
 
-      {modal && (
-        <BookModal
-          book={selected}
-          onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); load(); onAction(); }}
-        />
-      )}
+      <ModalForm open={!!modal} title={modal === 'create' ? 'Add New Book' : 'Edit Book'} onClose={() => setModal(null)} footer={(
+        <>
+          <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
+          <button className="btn btn-primary" form="book-form" type="submit">{modal === 'create' ? 'Add Book' : 'Save Changes'}</button>
+        </>
+      )}>
+        <BookModal book={selected} onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); onAction(); }} />
+      </ModalForm>
       {/* Using UIProvider confirm/toast - no local dialogs here */}
     </div>
   );

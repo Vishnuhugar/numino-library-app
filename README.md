@@ -100,7 +100,14 @@ Services previously mixed business logic with raw SQLAlchemy queries. Now:
 This means services can be tested by injecting a mock repository (no DB needed),
 and all query changes are localised to one file per entity.
 
-### 4. Tests
+### 4. Frontend Architecture
+
+- **`frontend/src/lib/api.ts`** centralizes all REST calls and prevents duplicate submit actions.
+- **`frontend/src/components/ui/UIProvider.tsx`** exposes a single toast/confirm interface used by all pages.
+- **Generic components** like `DataTable` and `ModalForm` are reused across book, member, and loan views.
+- **`ErrorBoundary`** now catches runtime render errors at the app root and shows a consistent fallback UI.
+
+### 5. Tests
 
 Tests use **pytest-asyncio** + **HTTPX AsyncClient** + **in-memory SQLite** via
 `aiosqlite`. No external services are required.

@@ -1,10 +1,6 @@
+import { API_PREFIX, MEMBERS_ENDPOINT, BOOKS_ENDPOINT, LOANS_ENDPOINT } from './constants';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-export const API_PREFIX = '/api/v1';
-export const ENDPOINTS = {
-  members: '/members',
-  books: '/books',
-  loans: '/loans',
-};
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${API_PREFIX}${path}`, {
@@ -93,14 +89,14 @@ export const membersApi = {
     if (params?.size) q.set('size', String(params.size));
     if (params?.search) q.set('search', params.search);
     if (params?.active_only) q.set('active_only', 'true');
-    return apiFetch<PagedResponse<Member>>(`/members?${q}`);
+    return apiFetch<PagedResponse<Member>>(`${MEMBERS_ENDPOINT}?${q}`);
   },
-  get: (id: string) => apiFetch<Member>(`/members/${id}`),
+  get: (id: string) => apiFetch<Member>(`${MEMBERS_ENDPOINT}/${id}`),
   create: (data: Partial<Member>) =>
-    apiFetch<Member>('/members', { method: 'POST', body: JSON.stringify(data) }),
+    apiFetch<Member>(MEMBERS_ENDPOINT, { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Partial<Member>) =>
-    apiFetch<Member>(`/members/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  delete: (id: string) => apiFetch<void>(`/members/${id}`, { method: 'DELETE' }),
+    apiFetch<Member>(`${MEMBERS_ENDPOINT}/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch<void>(`${MEMBERS_ENDPOINT}/${id}`, { method: 'DELETE' }),
 };
 
 // ── Books ─────────────────────────────────────────────────────────────────────
@@ -113,14 +109,14 @@ export const booksApi = {
     if (params?.search) q.set('search', params.search);
     if (params?.genre) q.set('genre', params.genre);
     if (params?.available_only) q.set('available_only', 'true');
-    return apiFetch<PagedResponse<Book>>(`/books?${q}`);
+    return apiFetch<PagedResponse<Book>>(`${BOOKS_ENDPOINT}?${q}`);
   },
-  get: (id: string) => apiFetch<Book>(`/books/${id}`),
+  get: (id: string) => apiFetch<Book>(`${BOOKS_ENDPOINT}/${id}`),
   create: (data: Partial<Book>) =>
-    apiFetch<Book>('/books', { method: 'POST', body: JSON.stringify(data) }),
+    apiFetch<Book>(BOOKS_ENDPOINT, { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Partial<Book>) =>
-    apiFetch<Book>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  delete: (id: string) => apiFetch<void>(`/books/${id}`, { method: 'DELETE' }),
+    apiFetch<Book>(`${BOOKS_ENDPOINT}/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch<void>(`${BOOKS_ENDPOINT}/${id}`, { method: 'DELETE' }),
 };
 
 // ── Loans ─────────────────────────────────────────────────────────────────────
@@ -134,14 +130,14 @@ export const loansApi = {
     if (params?.book_id) q.set('book_id', params.book_id);
     if (params?.active_only) q.set('active_only', 'true');
     if (params?.overdue_only) q.set('overdue_only', 'true');
-    return apiFetch<PagedResponse<Loan>>(`/loans?${q}`);
+    return apiFetch<PagedResponse<Loan>>(`${LOANS_ENDPOINT}?${q}`);
   },
-  get: (id: string) => apiFetch<Loan>(`/loans/${id}`),
+  get: (id: string) => apiFetch<Loan>(`${LOANS_ENDPOINT}/${id}`),
   borrow: (data: { member_id: string; book_id: string; notes?: string }) =>
-    apiFetch<Loan>('/loans', { method: 'POST', body: JSON.stringify(data) }),
+    apiFetch<Loan>(LOANS_ENDPOINT, { method: 'POST', body: JSON.stringify(data) }),
   return: (id: string, notes?: string) =>
-    apiFetch<Loan>(`/loans/${id}/return`, { method: 'POST', body: JSON.stringify({ notes }) }),
+    apiFetch<Loan>(`${LOANS_ENDPOINT}/${id}/return`, { method: 'POST', body: JSON.stringify({ notes }) }),
   payFine: (id: string) =>
-    apiFetch<Loan>(`/loans/${id}/pay-fine`, { method: 'POST', body: '{}' }),
-  stats: () => apiFetch<LibraryStats>('/loans/stats'),
+    apiFetch<Loan>(`${LOANS_ENDPOINT}/${id}/pay-fine`, { method: 'POST', body: '{}' }),
+  stats: () => apiFetch<LibraryStats>(`${LOANS_ENDPOINT}/stats`),
 };

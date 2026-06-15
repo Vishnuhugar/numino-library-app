@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, RotateCcw, DollarSign, X, Search } from 'lucide-react';
 import { loansApi, membersApi, booksApi, type Loan, type Member, type Book } from '@/lib/api';
 import { useUI } from '@/components/ui/UIProvider';
+import DataTable from '@/components/ui/DataTable';
+import ModalForm from '@/components/ui/ModalForm';
 
 export default function LoansSection({ onAction }: { onAction: () => void }) {
   const [loans, setLoans]     = useState<Loan[]>([]);
@@ -77,67 +79,42 @@ export default function LoansSection({ onAction }: { onAction: () => void }) {
         ) : loans.length === 0 ? (
           <div className="loading-empty">No loans found.</div>
         ) : (
-          <table className="lib-table">
-            <thead>
-              <tr>
-                <th>Book</th><th>Member</th><th>Borrowed</th>
-                <th>Due Date</th><th>Returned</th><th>Fine</th><th>Status</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loans.map(loan => {
-                const isOverdue = !loan.returned_at && loan.due_date < today;
-                const isActive  = !loan.returned_at;
-                const fine      = Number(loan.fine_amount);
-                return (
-                  <tr key={loan.id}>
-                    <td>
-                      <div className="cell-strong">{loan.book_title}</div>
-                      <div className="cell-sub">{loan.book_author}</div>
-                    </td>
-                    <td style={{ color:'rgba(26,18,8,0.7)' }}>{loan.member_name}</td>
-                    <td style={{ fontSize:'0.88rem', color:'rgba(26,18,8,0.55)' }}>
-                      {new Date(loan.borrowed_at).toLocaleDateString()}
-                    </td>
-                    <td style={{ fontSize:'0.88rem', color: isOverdue ? '#8b1a1a' : 'rgba(26,18,8,0.55)', fontWeight: isOverdue ? 600 : 400 }}>
-                      {new Date(loan.due_date).toLocaleDateString()}
-                    </td>
-                    <td className="cell-small">{loan.returned_at ? new Date(loan.returned_at).toLocaleDateString() : '—'}</td>
-                    <td>
-                      {fine > 0 ? (
-                        <span style={{ color: loan.fine_paid ? '#2d5016' : '#8b1a1a', fontWeight:600 }}>
-                          ${fine.toFixed(2)} {loan.fine_paid ? '✓' : ''}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td>
-                      <span className={`badge ${isActive ? (isOverdue ? 'badge-overdue' : 'badge-active') : 'badge-returned'}`}>
-                        {isActive ? (isOverdue ? 'Overdue' : 'Active') : 'Returned'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="action-row">
-                        {isActive && (
-                          <button className="btn btn-ghost btn-sm" title="Return book" onClick={async () => {
-                            const ok = await confirm({ title: 'Return Book', message: `Return "${loan.book_title}"?` });
-                            if (!ok) return;
-                            await doReturn(loan);
-                          }}>
-                            <RotateCcw size={13}/>
-                          </button>
-                        )}
-                        {!isActive && fine > 0 && !loan.fine_paid && (
-                          <button className="btn btn-ghost btn-sm payfine-btn" title="Pay fine" onClick={() => handlePayFine(loan)}>
-                            <DollarSign size={13}/>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable<Loan>
+            columns={[
+              { key: 'book', title: 'Book', render: (loan) => <div><div className="cell-strong">{loan.book_title}</div><div className="cell-sub">{loan.book_author}</div></div> },
+              { key: 'member', title: 'Member', render: (loan) => <div className="cell-muted">{loan.member_name}</div> },
+              { key: 'borrowed', title: 'Borrowed', render: (loan) => <div className="cell-small">{new Date(loan.borrowed_at).toLocaleDateString()}</div> },
+              { key: 'due', title: 'Due Date', render: (loan) => <div className={`cell-small ${(!loan.returned_at && loan.due_date < today) ? 'due-overdue' : ''}`}>{new Date(loan.due_date).toLocaleDateString()}</div> },
+              { key: 'returned', title: 'Returned', render: (loan) => loan.returned_at ? new Date(loan.returned_at).toLocaleDateString() : '—' },
+              { key: 'fine', title: 'Fine', render: (loan) => {
+                const fine = Number(loan.fine_amount);
+                return fine > 0 ? <span className={`fine-amount ${loan.fine_paid ? 'fine-paid' : 'fine-unpaid'}`}>${fine.toFixed(2)} {loan.fine_paid ? '✓' : ''}</span> : '—';
+              }},
+              { key: 'status', title: 'Status', render: (loan) => {
+                const isActive = !loan.returned_at; const isOverdue = !loan.returned_at && loan.due_date < today;
+                return <span className={`badge ${isActive ? (isOverdue ? 'badge-overdue' : 'badge-active') : 'badge-returned'}`}>{isActive ? (isOverdue ? 'Overdue' : 'Active') : 'Returned'}</span>;
+              }},
+              { key: 'actions', title: '', render: (loan) => (
+                <div className="action-row">
+                  {(!loan.returned_at) ? (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      title="Return book"
+                      disabled={returningIds.includes(loan.id)}
+                      onClick={async () => {
+                        const ok = await confirm({ title: 'Return Book', message: `Return "${loan.book_title}"?` });
+                        if (!ok) return; await doReturn(loan);
+                      }}
+                    ><RotateCcw size={13}/></button>
+                  ) : (Number(loan.fine_amount) > 0 && !loan.fine_paid) ? (
+                    <button className="btn btn-ghost btn-sm payfine-btn" title="Pay fine" onClick={() => handlePayFine(loan)}><DollarSign size={13}/></button>
+                  ) : null}
+                </div>
+              )},
+            ]}
+            data={loans}
+            rowKey={(r) => (r as any).id}
+          />
         )}
       </div>
 
@@ -149,12 +126,9 @@ export default function LoansSection({ onAction }: { onAction: () => void }) {
         </div>
       )}
 
-      {modal && (
-        <BorrowModal
-          onClose={() => setModal(false)}
-          onSaved={() => { setModal(false); load(); onAction(); }}
-        />
-      )}
+      <ModalForm open={!!modal} title="Record New Loan" onClose={() => setModal(false)}>
+        <BorrowModal onClose={() => setModal(false)} onSaved={() => { setModal(false); load(); onAction(); }} />
+      </ModalForm>
     </div>
   );
 }
